@@ -1,92 +1,41 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, status, HTTPException
+from sqlalchemy.orm import Session
+from typing import List
+import database, schemas.department, models.department, dependencies
 
-from schemas.department import DepartmentCreate
+router = APIRouter(prefix="/departments", tags=['Departments'])
 
-from dependencies import get_current_user
+@router.get("/", response_model=List[schemas.department.DepartmentOut]) 
+def get_all(db: Session = Depends(database.get_db), current_user=Depends(dependencies.get_current_user)):
+    return db.query(models.department.Department).all()
 
-router = APIRouter(
-    prefix="/departments",
-    tags=["Departments"],
-    dependencies=[Depends(get_current_user)]
-)
+@router.post("/", status_code=status.HTTP_201_CREATED) 
+def create(request: schemas.department.DepartmentCreate, db: Session = Depends(database.get_db), current_admin=Depends(dependencies.admin_required)):
+    new_dept = models.department.Department(**request.dict())
+    db.add(new_dept)
+    db.commit()
+    db.refresh(new_dept) 
+    return new_dept
 
-departments = []
+@router.put("/{id}", response_model=schemas.department.DepartmentOut)
+def update_department(id: int, request: schemas.department.DepartmentCreate, db: Session = Depends(database.get_db), current_admin=Depends(dependencies.admin_required)):
+    dept_query = db.query(models.department.Department).filter(models.department.Department.id == id)
+    dept = dept_query.first()
+    
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+        
+    dept_query.update(request.dict())
+    db.commit()
+    return dept_query.first()
 
-@router.get("/")
-def get_departments():
-
-    return departments
-
-@router.post("/")
-def create_department(
-    department: DepartmentCreate
-):
-
-    new_department = {
-        "id": len(departments) + 1,
-        "name": department.name,
-        "location": department.location
-    }
-
-    departments.append(new_department)
-
-    return {
-        "message":"Department Created",
-        "department": new_department
-    }
-
-@router.get("/{id}")
-def get_department(id:int):
-
-    for department in departments:
-
-        if department["id"] == id:
-
-            return department
-
-    raise HTTPException(
-        status_code=404,
-        detail="Department Not Found"
-    )
-
-@router.put("/{id}")
-def update_department(
-    id:int,
-    department: DepartmentCreate
-):
-
-    for dept in departments:
-
-        if dept["id"] == id:
-
-            dept["name"] = department.name
-
-            dept["location"] = department.location
-
-            return {
-                "message":"Department Updated",
-                "department": dept
-            }
-
-    raise HTTPException(
-        status_code=404,
-        detail="Department Not Found"
-    )
-
-@router.delete("/{id}")
-def delete_department(id:int):
-
-    for dept in departments:
-
-        if dept["id"] == id:
-
-            departments.remove(dept)
-
-            return {
-                "message":"Department Deleted"
-            }
-
-    raise HTTPException(
-        status_code=404,
-        detail="Department Not Found"
-    )
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_department(id: int, db: Session = Depends(database.get_db), current_admin=Depends(dependencies.admin_required)):
+    dept = db.query(models.department.Department).filter(models.department.Department.id == id).first()
+    
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+        
+    db.delete(dept)
+    db.commit()
+    return {"detail": "Department deleted"}

@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 class DepartmentBase(BaseModel):
     name: str
-    location: str = "string"
+    location: str = "HQ"
 
 class DepartmentCreate(DepartmentBase):
     pass
